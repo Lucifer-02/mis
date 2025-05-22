@@ -1,0 +1,9 @@
+- Các bảng ở DB có thể INSERT hoặc TRUNCATE
+- Các bảng có thể không có cột thời gian, thường là các bảng cập nhật chậm (1-2 năm)
+- Các bảng có có thể không có cột DATE8 mà có cột khác. vd: DATE6, FILENAME,...
+
+## case 1: INSERT bảng
+  1. insert data vào db
+  2. cập nhật bảng cờ
+  3. trigger lấy ra các bản ghi mới trong bảng cờ, dựa trên trường DATE8 và TABLE_NAME để lấy ra record mới
+  4. ghi ra file với hậu tố timestamp.
