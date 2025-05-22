@@ -230,12 +230,6 @@ wheels = [
 ]
 
 [[package]]
-name = "cx-oracle"
-version = "8.3.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e8/16/13c265afc984796fe38ee928733569b599cfd657245ddd1afad238b66656/cx_Oracle-8.3.0.tar.gz", hash = "sha256:3b2d215af4441463c97ea469b9cc307460739f89fdfa8ea222ea3518f1a424d9", size = 363886, upload-time = "2021-11-04T22:08:34.141Z" }
-
-[[package]]
 name = "decorator"
 version = "5.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -347,13 +341,11 @@ dependencies = [
     { name = "azure-identity" },
     { name = "azure-storage-file" },
     { name = "azure-storage-file-datalake" },
-    { name = "cx-oracle" },
     { name = "dotenv" },
     { name = "ipython" },
     { name = "oracledb" },
     { name = "pandas" },
     { name = "pyarrow" },
-    { name = "pyspark" },
     { name = "simple-ddl-parser" },
     { name = "sqlglot", extra = ["rs"] },
     { name = "sqlparse" },
@@ -364,13 +356,11 @@ requires-dist = [
     { name = "azure-identity", specifier = ">=1.21.0" },
     { name = "azure-storage-file", specifier = ">=2.1.0" },
     { name = "azure-storage-file-datalake", specifier = ">=12.20.0" },
-    { name = "cx-oracle", specifier = ">=8.3.0" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "ipython", specifier = ">=9.2.0" },
     { name = "oracledb", specifier = ">=3.1.0" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "pyarrow", specifier = ">=20.0.0" },
-    { name = "pyspark", specifier = ">=3.5.5" },
     { name = "simple-ddl-parser", specifier = ">=1.7.1" },
     { name = "sqlglot", extras = ["rs"], specifier = ">=26.17.1" },
     { name = "sqlparse", specifier = ">=0.5.3" },
@@ -556,15 +546,6 @@ wheels = [
 ]
 
 [[package]]
-name = "py4j"
-version = "0.10.9.7"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/1e/f2/b34255180c72c36ff7097f7c2cdca02abcbd89f5eebf7c7c41262a9a0637/py4j-0.10.9.7.tar.gz", hash = "sha256:0b6e5315bb3ada5cf62ac651d107bb2ebc02def3dee9d9548e3baac644ea8dbb", size = 1508234, upload-time = "2022-08-12T22:49:09.792Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/30/a58b32568f1623aaad7db22aa9eafc4c6c194b429ff35bdc55ca2726da47/py4j-0.10.9.7-py2.py3-none-any.whl", hash = "sha256:85defdfd2b2376eb3abf5ca6474b51ab7e0de341c75a02f46dc9b5976f5a5c1b", size = 200481, upload-time = "2022-08-12T22:49:07.05Z" },
-]
-
-[[package]]
 name = "pyarrow"
 version = "20.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -630,15 +611,6 @@ wheels = [
 crypto = [
     { name = "cryptography" },
 ]
-
-[[package]]
-name = "pyspark"
-version = "3.5.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "py4j" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5f/8f/b616ef710932ccdbabd8511e08890a677482ab2967b7cf276c09a02bc64c/pyspark-3.5.5.tar.gz", hash = "sha256:6effc9ce98edf231f4d683fd14f7270629bf8458c628d6a2620ded4bb34f3cb9", size = 317214975, upload-time = "2025-02-27T09:16:31.75Z" }
 
 [[package]]
 name = "python-dateutil"
