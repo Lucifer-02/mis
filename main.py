@@ -127,6 +127,7 @@ def track():
     assert Path(SAVE_DIR).is_dir()
 
     db_config = OracledbConfig.load_config()
+    logging.info(db_config)
 
     connection = None
 
@@ -143,9 +144,9 @@ def track():
         cqn_handler.wait_for_notifications()
 
     except oracledb.Error as e:
-        logging.error(f"Database error: {e}")
+        logging.error(f"Database error: {e}", stack_info=True, exc_info=True)
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error(f"Error: {e}", stack_info=True, exc_info=True)
     except KeyboardInterrupt:
         logging.info("Exiting.")
     finally:
