@@ -13,9 +13,10 @@ connection = oracledb.connect("REPORT/123456@localhost:1521/mydatabase", events=
 
 # Register for notifications
 sub = connection.subscribe(
-    # namespace=oracledb.SUBSCR_NAMESPACE_DBCHANGE,
+    namespace=oracledb.SUBSCR_NAMESPACE_DBCHANGE,
     callback=callback,
     # client_initiated=True,
+    port=123456,
     operations=oracledb.OPCODE_ALLOPS,
     qos=oracledb.SUBSCR_QOS_ROWIDS,
 )
