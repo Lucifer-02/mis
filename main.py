@@ -10,10 +10,11 @@ from cqn import OracledbConfig, CQNHandler
 from utils import get_env_var
 import load_db
 import upload
+import poll
 
 
 def handle_target_tables(
-    conn: oracledb.Connection, tables: pd.DataFrame, schema: str, save_dir: Path
+    tables: pd.DataFrame, *, conn: oracledb.Connection, schema: str, save_dir: Path
 ) -> None:
     if set(tables.columns) == {
         "SURROGATE_KEY",
@@ -56,7 +57,7 @@ def handle_target_tables(
             # logging.info(resp)
 
         except KeyError as ke:
-            logging.error(f"look like invalid columns:", ke)
+            logging.error(f"Look like invalid columns:", ke)
         except Exception as e:
             logging.error(
                 f"Failed to handle table {table_name}, {e}, skipping...",
@@ -158,13 +159,61 @@ def track():
                 logging.error(f"Error closing connection: {e}")
 
 
+def poll_track():
+
+    dotenv.load_dotenv()
+
+    TABLE_TO_MONITOR = get_env_var("TABLE_TO_MONITOR")
+    SCHEMA = get_env_var("SCHEMA")
+    SAVE_DIR = get_env_var("SAVE_DIR")
+
+    assert Path(SAVE_DIR).is_dir()
+
+    db_config = OracledbConfig.load_config()
+    logging.info(db_config)
+
+    connection = None
+
+    try:
+        connection = db_config.connect(db_config)
+
+        poll.start_monitoring(
+            conn=connection,
+            key_col="SURROGATE_KEY",
+            full_table_name=f"{SCHEMA}.{TABLE_TO_MONITOR}",
+            last_check_file=Path("state.json"),
+            handle_func=handle_target_tables,
+            schema=SCHEMA,
+            save_dir=Path(SAVE_DIR),
+        )
+
+    except oracledb.Error as e:
+        logging.error(f"Database error: {e}", stack_info=True, exc_info=True)
+    except Exception as e:
+        logging.error(f"Error: {e}", stack_info=True, exc_info=True)
+    except KeyboardInterrupt:
+        logging.info("Exiting.")
+    finally:
+        if connection:
+            try:
+                connection.close()
+                logging.info("Database connection closed.")
+            except oracledb.Error as e:
+                logging.error(f"Error closing connection: {e}")
+
+
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     dotenv.load_dotenv()
 
     # upload_all()
-    track()
+    # track()
+    poll_track()
 
 
 if __name__ == "__main__":

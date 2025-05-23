@@ -49,7 +49,7 @@ def _get_records(
 
     TEMP_DIR = save_dir / Path("temp")
 
-    logging.info(f"Query: {sql}")
+    logging.debug(f"Query: {sql}")
 
     ts = timestamp.strftime("%Y%m%dT%H%M%S")
 
@@ -96,13 +96,13 @@ def get_new_records(
     schema: str,
     save_dir: Path,
     debug: bool = True,
-    chunksize=400000,
+    chunksize=200000,
 ) -> Path:
     assert save_dir.is_dir()
 
     logging.info("Connection successful")
     QUERY = f"SELECT * FROM {schema}.{table_name} WHERE {time_column} = '{time_value}'"
-    logging.info(f"Query: {QUERY}")
+    logging.debug(f"Query: {QUERY}")
     logging.info(
         f"Starting getting new records for table {schema}.{table_name} at {time_value}..."
     )
@@ -130,7 +130,7 @@ def fetch_new_records(
         FROM {full_table_name}
         WHERE ROWID IN ({placeholders})
     """
-    logging.info(f"Query: {QUERY}")
+    logging.debug(f"Query: {QUERY}")
 
     df = pd.read_sql(QUERY, con=conn, params=ids)
 
@@ -155,3 +155,19 @@ def get_all_tables(conn: oracledb.Connection, schema: str) -> List[str]:
     table_names = [row[0] for row in cursor.fetchall()]
 
     return table_names
+
+
+def get_new_records1(
+    conn: oracledb.Connection, key_col: str, last_key: str, full_table_name: str
+) -> pd.DataFrame:
+
+    QUERY = f"""
+        SELECT *
+        FROM {full_table_name}
+        WHERE {key_col} > :last_key 
+    """
+    logging.debug(f"Query: {QUERY}")
+
+    df = pd.read_sql(QUERY, con=conn, params={"last_key": last_key})
+
+    return df
