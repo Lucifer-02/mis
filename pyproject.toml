@@ -3,7 +3,7 @@ name = "mis"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "azure-identity>=1.21.0",
     "azure-storage-file>=2.1.0",
@@ -13,7 +13,5 @@ dependencies = [
     "oracledb>=3.1.0",
     "pandas>=2.2.3",
     "pyarrow>=20.0.0",
-    "simple-ddl-parser>=1.7.1",
-    "sqlglot[rs]>=26.17.1",
-    "sqlparse>=0.5.3",
+    "pytest>=8.3.5",
 ]

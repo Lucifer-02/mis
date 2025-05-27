@@ -5,14 +5,13 @@ from pathlib import Path
 import time
 from typing import Callable
 
-import oracledb
-import pandas as pd
 
 import load_db
 
 
 def load_last_record_id(last_check_file: Path) -> str:
     """Load the last processed record ID from file"""
+
     if not last_check_file.is_file():
         logging.info(f"{last_check_file} not exist.")
 
@@ -25,12 +24,11 @@ def load_last_record_id(last_check_file: Path) -> str:
 
 def save_last_record_id(record_id: str, last_check_file: Path):
     """Save the last processed record ID to file"""
+
     data = {"last_record_id": record_id, "last_update": datetime.now().isoformat()}
     with open(last_check_file, "w") as f:
         json.dump(data, f)
         logging.info("Saved to id file.")
-
-
 
 
 def start_monitoring(
@@ -76,7 +74,3 @@ def start_monitoring(
         except Exception as e:
             logging.error(f"Unexpected error: {e}")
             time.sleep(poll_interval)
-
-
-if __name__ == "__main__":
-    main()

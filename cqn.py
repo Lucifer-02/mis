@@ -153,15 +153,17 @@ class OracledbConfig:
     def connect(config: "OracledbConfig") -> oracledb.Connection:
         """Establishes and returns an OracleDB connection."""
         connection = None
-        try:
-            try:
-                oracledb.init_oracle_client(lib_dir=config.client_lib_dir)
-                logging.info("Oracle Client thick mode enabled.")
-            except Exception as e:
-                logging.error(
-                    f"Oracle Client thick mode initialization failed: {e}. Falling back to thin mode. To enable thick mode, set environment variable ORACLE_CLIENT_LIB_DIR"
-                )
 
+        try:
+            oracledb.init_oracle_client(lib_dir=config.client_lib_dir)
+            logging.info("Oracle Client thick mode enabled.")
+        except Exception as e:
+            logging.error(
+                f"Oracle Client thick mode initialization failed: {e}. Falling back to thin mode. To enable thick mode, set environment variable ORACLE_CLIENT_LIB_DIR"
+            )
+            raise e
+
+        try:
             connection = oracledb.connect(
                 user=config.db_user,
                 password=config.db_password,
@@ -172,7 +174,4 @@ class OracledbConfig:
             return connection
         except oracledb.Error as e:
             logging.error(f"Database connection error: {e}")
-            raise e
-        except Exception as e:
-            logging.error(f"Error connecting to database: {e}")
             raise e

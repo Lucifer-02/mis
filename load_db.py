@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 import os
 from pathlib import Path
 from typing import List
@@ -8,24 +7,32 @@ import oracledb
 import pandas as pd
 
 
-def test_fetch_new_records(conn):
-    with conn.cursor() as cursor:
-        cursor.execute("SELECT * FROM etl.my_table")
-        rows = cursor.fetchall()
-        for row in rows:
-            print("New Record:", row)
+def test_fetch_new_records(conn: oracledb.Connection) -> None:
+    """
+    Fetch and print all records from a test table.
+    """
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM etl.my_table")
+            rows = cursor.fetchall()
+            for row in rows:
+                print("New Record:", row)
+    except Exception as e:
+        logging.error(f"Error fetching new records: {e}")
 
 
 def get_all_records(
     conn: oracledb.Connection,
     table_name: str,
     schema: str,
-    timestamp: datetime,
+    timestamp: str,
     save_dir: Path,
     debug: bool,
 ) -> Path:
-
-    QUERY = f"""SELECT * FROM {schema}.{table_name}"""
+    """
+    Fetch all records from a table and save them as a Parquet file.
+    """
+    QUERY = f"SELECT * FROM {schema}.{table_name}"
     return _get_records(
         conn=conn,
         table_name=table_name,
@@ -40,51 +47,49 @@ def _get_records(
     conn: oracledb.Connection,
     table_name: str,
     sql: str,
-    timestamp: datetime,
+    timestamp: str,
     save_dir: Path,
     debug: bool = True,
-    chunksize=400000,
+    chunksize: int = 200000,
 ) -> Path:
-    assert save_dir.is_dir()
+    """
+    Fetch records in chunks, save them as Parquet files, and optionally combine them.
+    """
+    assert save_dir.is_dir(), f"Save directory {save_dir} does not exist."
 
-    TEMP_DIR = save_dir / Path("temp")
+    TEMP_DIR = save_dir / "temp"
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
-    logging.debug(f"Query: {sql}")
-
-    ts = timestamp.strftime("%Y%m%dT%H%M%S")
+    logging.debug(f"Executing Query: {sql}")
 
     temp_files = []
-    # avoid out of memory
     chunks = pd.read_sql(
         sql=sql,
         con=conn,
         chunksize=chunksize,
-        dtype_backend="pyarrow",  # use pyarrow for better type resolution
+        dtype_backend="pyarrow",
     )
     for i, chunk in enumerate(chunks):
-        file_name = TEMP_DIR / Path(f"{table_name}_{ts}_{i}.parquet")
+        file_name = TEMP_DIR / f"{table_name}_{timestamp}_{i}.parquet"
         chunk.to_parquet(file_name)
         temp_files.append(file_name)
 
-    logging.info(f"There are {temp_files} chunks.")
+    logging.info(f"Generated {len(temp_files)} chunk files.")
 
-    save = save_dir / Path(f"{table_name}_{ts}.parquet")
-    combine = pd.concat(
-        [
-            pd.read_parquet(file, dtype_backend="pyarrow", engine="pyarrow")
-            for file in temp_files
-        ],
+    save_path = save_dir / f"{table_name}_{timestamp}.parquet"
+
+    combined = pd.concat(
+        [pd.read_parquet(file, dtype_backend="pyarrow") for file in temp_files],
         ignore_index=True,
     )
-    logging.info("Combined all chunks.")
-    combine.to_parquet(save, engine="pyarrow", coerce_timestamps="ms")
-    logging.info(f"Saved {save}")
+    logging.info(combined.info())
+    combined.to_parquet(save_path, engine="pyarrow", coerce_timestamps="ms")
 
     if not debug:
         for file in temp_files:
             os.remove(file)
 
-    return save
+    return save_path
 
 
 def get_new_records(
@@ -92,20 +97,19 @@ def get_new_records(
     table_name: str,
     time_column: str,
     time_value: str,
-    timestamp: datetime,
+    timestamp: str,
     schema: str,
     save_dir: Path,
     debug: bool = True,
-    chunksize=200000,
+    chunksize: int = 200000,
 ) -> Path:
-    assert save_dir.is_dir()
+    """
+    Fetch new records based on a time column and save them as a Parquet file.
+    """
+    assert save_dir.is_dir(), f"Save directory {save_dir} does not exist."
 
-    logging.info("Connection successful")
-    QUERY = f"SELECT * FROM {schema}.{table_name} WHERE {time_column} = '{time_value}'"
-    logging.debug(f"Query: {QUERY}")
-    logging.info(
-        f"Starting getting new records for table {schema}.{table_name} at {time_value}..."
-    )
+    QUERY = f"SELECT * FROM {schema}.{table_name} WHERE {time_column} = {time_value}"
+    logging.info(f"Fetching new records for {schema}.{table_name} at {time_value}.")
 
     return _get_records(
         conn=conn,
@@ -119,55 +123,57 @@ def get_new_records(
 
 
 def fetch_new_records(
-    conn: oracledb.Connection, ids: list, full_table_name: str
+    conn: oracledb.Connection, ids: List[str], full_table_name: str
 ) -> pd.DataFrame:
-    assert len(ids) > 0
-
-    # Create placeholders like :1, :2, :3, ...
-    placeholders = ", ".join([f":{i+1}" for i in range(len(ids))])
-    QUERY = f"""
-        SELECT *
-        FROM {full_table_name}
-        WHERE ROWID IN ({placeholders})
     """
-    logging.debug(f"Query: {QUERY}")
+    Fetch records by ROWID.
+    """
+    assert ids, "ID list cannot be empty."
 
-    df = pd.read_sql(QUERY, con=conn, params=ids)
+    placeholders = ", ".join([f":{i+1}" for i in range(len(ids))])
+    QUERY = f"SELECT * FROM {full_table_name} WHERE ROWID IN ({placeholders})"
 
-    return df
+    try:
+        df = pd.read_sql(QUERY, con=conn, params=ids)
+        return df
+    except Exception as e:
+        logging.error(f"Error fetching records by ROWID: {e}")
+        raise
 
 
 def get_all_tables(conn: oracledb.Connection, schema: str) -> List[str]:
-    assert schema.isupper()
+    """
+    Get all table names for a given schema.
+    """
+    assert schema.isupper(), "Schema name must be uppercase."
 
-    cursor = conn.cursor()
-
-    # Query to get table names
-    cursor.execute(
-        f"""
-        SELECT table_name 
-        FROM all_tables 
-        WHERE owner = :schema
-        """,
-        schema=schema,
-    )
-
-    table_names = [row[0] for row in cursor.fetchall()]
-
-    return table_names
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT table_name 
+                FROM all_tables 
+                WHERE owner = :schema
+                """,
+                schema=schema,
+            )
+            return [row[0] for row in cursor.fetchall()]
+    except Exception as e:
+        logging.error(f"Error fetching table names: {e}")
+        raise
 
 
 def get_new_records1(
     conn: oracledb.Connection, key_col: str, last_key: str, full_table_name: str
 ) -> pd.DataFrame:
-
-    QUERY = f"""
-        SELECT *
-        FROM {full_table_name}
-        WHERE {key_col} > :last_key 
     """
-    logging.debug(f"Query: {QUERY}")
+    Fetch new records based on a key column and last key value.
+    """
+    QUERY = f"SELECT * FROM {full_table_name} WHERE {key_col} > :last_key"
 
-    df = pd.read_sql(QUERY, con=conn, params={"last_key": last_key})
-
-    return df
+    try:
+        df = pd.read_sql(QUERY, con=conn, params={"last_key": last_key})
+        return df
+    except Exception as e:
+        logging.error(f"Error fetching new records by key: {e}")
+        raise

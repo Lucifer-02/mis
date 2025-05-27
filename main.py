@@ -6,6 +6,7 @@ from datetime import datetime
 import oracledb
 import pandas as pd
 
+
 from cqn import OracledbConfig, CQNHandler
 from utils import get_env_var
 import load_db
@@ -16,7 +17,7 @@ import poll
 def handle_target_tables(
     tables: pd.DataFrame, *, conn: oracledb.Connection, schema: str, save_dir: Path
 ) -> None:
-    if set(tables.columns) == {
+    if set(tables.columns) != {
         "SURROGATE_KEY",
         "UPDATE_TIME",
         "TABLE_NAME",
@@ -37,8 +38,6 @@ def handle_target_tables(
             table_name = str(row["TABLE_NAME"])
             time_column = str(row["TIME_COLUMN"])
             time_value = str(row["TIME_VALUE"])
-            logging.info(row["UPDATE_TIME"])
-            timestamp = datetime.strptime(str(row["UPDATE_TIME"]), "%Y-%m-%d %H:%M:%S")
 
             logging.info("Getting new records...")
             saved = load_db.get_new_records(
@@ -47,14 +46,21 @@ def handle_target_tables(
                 time_value=time_value,
                 table_name=table_name,
                 schema=schema,
-                timestamp=timestamp,
+                timestamp=time_value,
                 save_dir=save_dir,
             )
             logging.info(f"Successfully load data to {saved}.")
 
-            # Pass the config to test_upload
-            # resp = upload.test_upload(local_file_to_upload=saved)
-            # logging.info(resp)
+            success_default = upload.upload_file_to_onelake(
+                config=upload.OnelakeConfig.load_config(),
+                local_file=saved,
+                target_file=Path(saved.name),
+            )
+
+            if success_default:
+                logging.info("Upload successfully.")
+            else:
+                logging.error(f"Upload file {saved} failed.")
 
         except KeyError as ke:
             logging.error(f"Look like invalid columns:", ke)
@@ -112,7 +118,7 @@ def upload_all():
             conn=connection,
             schema=SCHEMA,
             table_name=table_name,
-            timestamp=datetime.now(),
+            timestamp=str(datetime.now()),
             save_dir=Path(SAVE_DIR),
             debug=False,
         )
@@ -176,7 +182,6 @@ def poll_track():
 
     try:
         connection = db_config.connect(db_config)
-
         poll.start_monitoring(
             conn=connection,
             key_col="SURROGATE_KEY",
@@ -186,9 +191,6 @@ def poll_track():
             schema=SCHEMA,
             save_dir=Path(SAVE_DIR),
         )
-
-    except oracledb.Error as e:
-        logging.error(f"Database error: {e}", stack_info=True, exc_info=True)
     except Exception as e:
         logging.error(f"Error: {e}", stack_info=True, exc_info=True)
     except KeyboardInterrupt:
@@ -205,7 +207,7 @@ def poll_track():
 def main():
     logging.basicConfig(
         level=logging.DEBUG,
-        format="%(asctime)s %(levelname)s: %(message)s",
+        format="%(asctime)s-%(levelname)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
