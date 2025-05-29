@@ -46,7 +46,7 @@ def handle_target_tables(
                 time_value=time_value,
                 table_name=table_name,
                 schema=schema,
-                timestamp=time_value,
+                timestamp=datetime.now(),
                 save_dir=save_dir,
             )
             logging.info(f"Successfully load data to {saved}.")
@@ -118,11 +118,33 @@ def upload_all():
             conn=connection,
             schema=SCHEMA,
             table_name=table_name,
-            timestamp=str(datetime.now()),
+            timestamp=datetime.now(),
             save_dir=Path(SAVE_DIR),
             debug=False,
         )
         upload.test_upload(save)
+
+
+def upload_full_table(table_name: str):
+
+    SCHEMA = get_env_var("SCHEMA")
+    SAVE_DIR = get_env_var("SAVE_DIR")
+
+    db_config = OracledbConfig.load_config()
+
+    connection = db_config.connect(db_config)
+    assert connection is not None
+
+    logging.info(f"Loading table: {table_name}")
+    save = load_db.get_all_records(
+        conn=connection,
+        schema=SCHEMA,
+        table_name=table_name,
+        timestamp=datetime.now(),
+        save_dir=Path(SAVE_DIR),
+        debug=False,
+    )
+    upload.test_upload(save)
 
 
 def track():
@@ -213,9 +235,9 @@ def main():
 
     dotenv.load_dotenv()
 
-    # upload_all()
+    upload_all()
     # track()
-    poll_track()
+    # poll_track()
 
 
 if __name__ == "__main__":

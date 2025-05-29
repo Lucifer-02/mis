@@ -2,6 +2,7 @@ import logging
 import os
 from pathlib import Path
 from typing import List
+from datetime import datetime
 
 import oracledb
 import pandas as pd
@@ -25,7 +26,7 @@ def get_all_records(
     conn: oracledb.Connection,
     table_name: str,
     schema: str,
-    timestamp: str,
+    timestamp: datetime,
     save_dir: Path,
     debug: bool,
 ) -> Path:
@@ -47,7 +48,7 @@ def _get_records(
     conn: oracledb.Connection,
     table_name: str,
     sql: str,
-    timestamp: str,
+    timestamp: datetime,
     save_dir: Path,
     debug: bool = True,
     chunksize: int = 200000,
@@ -59,6 +60,7 @@ def _get_records(
 
     TEMP_DIR = save_dir / "temp"
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    TS = timestamp.strftime("%Y%m%dT%H%M%S")
 
     logging.debug(f"Executing Query: {sql}")
 
@@ -70,16 +72,23 @@ def _get_records(
         dtype_backend="pyarrow",
     )
     for i, chunk in enumerate(chunks):
-        file_name = TEMP_DIR / f"{table_name}_{timestamp}_{i}.parquet"
-        chunk.to_parquet(file_name)
+        file_name = TEMP_DIR / f"{table_name}_{TS}_{i}.parquet"
+        chunk.to_parquet(
+            file_name,
+            engine="pyarrow",
+            compression="zstd",  # fix crash on windows server vmware, https://github.com/apache/arrow/issues/25326
+        )
         temp_files.append(file_name)
 
     logging.info(f"Generated {len(temp_files)} chunk files.")
 
-    save_path = save_dir / f"{table_name}_{timestamp}.parquet"
+    save_path = save_dir / f"{table_name}_{TS}.parquet"
 
     combined = pd.concat(
-        [pd.read_parquet(file, dtype_backend="pyarrow") for file in temp_files],
+        [
+            pd.read_parquet(file, dtype_backend="pyarrow", engine="pyarrow")
+            for file in temp_files
+        ],
         ignore_index=True,
     )
     logging.info(combined.info())
@@ -97,7 +106,7 @@ def get_new_records(
     table_name: str,
     time_column: str,
     time_value: str,
-    timestamp: str,
+    timestamp: datetime,
     schema: str,
     save_dir: Path,
     debug: bool = True,

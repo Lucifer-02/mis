@@ -161,7 +161,7 @@ def upload_file_to_onelake(
     # Read the local file content
     if not os.path.exists(local_file):
         logging.error(f"Local file not found at '{local_file}'")
-        return {} # Return empty dict or raise error if file not found
+        return {}  # Return empty dict or raise error if file not found
 
     with open(local_file, "rb") as f:
         file_content = f.read()
@@ -195,7 +195,7 @@ def test_upload(local_file_to_upload: Path):
     success_default = upload_file_to_onelake(
         config=OnelakeConfig.load_config(),
         local_file=local_file_to_upload,
-        target_file=Path(local_file_to_upload.name),
+        target_file=local_file_to_upload,
     )
 
     if success_default:
