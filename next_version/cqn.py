@@ -125,53 +125,81 @@ class CQNHandler:
             logging.warning("Subscription not set up. Cannot wait for notifications.")
 
 
-@dataclass
-class OracledbConfig:
-    """Dataclass to hold OracleDB connection configuration."""
 
-    db_user: str
-    db_password: str
-    db_dsn: str
-    # Optional: Add lib_dir if thick mode is used and requires a specific path
-    client_lib_dir: str | None = None
 
-    @staticmethod
-    def load_config() -> "OracledbConfig":
-        # Load environment variables from .env file
-        dotenv.load_dotenv()
+def cqn_track():
 
-        return OracledbConfig(
-            db_user=get_env_var("DB_USER"),
-            db_password=get_env_var("DB_PASSWORD"),
-            db_dsn=get_env_var("DB_DSN"),
-            client_lib_dir=os.getenv(
-                "ORACLE_CLIENT_LIB_DIR"
-            ),  # Assuming ORACLE_LIB_DIR env var for lib_dir
+    TABLE_TO_MONITOR = get_env_var("TABLE_TO_MONITOR")
+    SCHEMA = get_env_var("SCHEMA")
+    SAVE_DIR = get_env_var("SAVE_DIR")
+
+    assert Path(SAVE_DIR).is_dir()
+
+    db_config = OracledbConfig.load_config()
+    logging.info(db_config)
+
+    connection = None
+
+    try:
+        connection = db_config.connect(db_config)
+
+        cqn_handler = CQNHandler(
+            conn=connection,
+            handle_func=handle_changes,
+            save_dir=Path(SAVE_DIR),
+            schema=SCHEMA,
         )
+        cqn_handler.setup_subscription(SCHEMA, TABLE_TO_MONITOR)
+        cqn_handler.wait_for_notifications()
 
-    @staticmethod
-    def connect(config: "OracledbConfig") -> oracledb.Connection:
-        """Establishes and returns an OracleDB connection."""
-        connection = None
+    except oracledb.Error as e:
+        logging.error(f"Database error: {e}", stack_info=True, exc_info=True)
+    except Exception as e:
+        logging.error(f"Error: {e}", stack_info=True, exc_info=True)
+    except KeyboardInterrupt:
+        logging.info("Exiting.")
+    finally:
+        if connection:
+            try:
+                connection.close()
+                logging.info("Database connection closed.")
+            except oracledb.Error as e:
+                logging.error(f"Error closing connection: {e}")
+
+def handle_changes(
+    conn: oracledb.Connection, message: oracledb.Message, schema: str, save_dir: Path
+) -> None:
+    for table in message.tables:
+        logging.info(f"Table: {table.name}")
+        ids = [row.rowid for row in table.rows]
+        assert conn is not None
+        assert table.name is not None
 
         try:
-            oracledb.init_oracle_client(lib_dir=config.client_lib_dir)
-            logging.info("Oracle Client thick mode enabled.")
-        except Exception as e:
-            logging.error(
-                f"Oracle Client thick mode initialization failed: {e}. Falling back to thin mode. To enable thick mode, set environment variable ORACLE_CLIENT_LIB_DIR"
+            df = load_db.fetch_new_records(
+                conn=conn,
+                ids=ids,
+                full_table_name=table.name,
             )
-            raise e
+            assert len(df) > 0
+            logging.info(df)
+            logging.info("---------------------")
+            handle_target_tables(conn=conn, tables=df, schema=schema, save_dir=save_dir)
 
-        try:
-            connection = oracledb.connect(
-                user=config.db_user,
-                password=config.db_password,
-                dsn=config.db_dsn,
-                events=True,  # Enable events for CQN
-            )
-            logging.info("Successfully connected to Oracle Database.")
-            return connection
         except oracledb.Error as e:
-            logging.error(f"Database connection error: {e}")
-            raise e
+            logging.exception(
+                f"Failed with table {table}: {e}, skipping...",
+                stack_info=True,
+                exc_info=True,
+            )
+
+def main():
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s-%(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    dotenv.load_dotenv()
+
+    cqn_track()

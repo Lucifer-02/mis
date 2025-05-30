@@ -47,7 +47,7 @@ def start_monitoring(
     while True:
         try:
             last_key = load_last_record_id(last_check_file=last_check_file)
-            new_records = load_db.get_new_records1(
+            new_records = load_db.get_new_records_linear(
                 conn=conn,
                 key_col=key_col,
                 last_key=last_key,
@@ -58,6 +58,7 @@ def start_monitoring(
 
             if len(new_records) > 0:
                 logging.info(f"Found {len(new_records)} new records")
+                logging.info(new_records)
 
                 save_last_record_id(
                     record_id=str(new_records.iloc[-1][key_col]),

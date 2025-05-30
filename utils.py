@@ -1,4 +1,9 @@
 import os
+from datetime import datetime
+
+
+def format_timestamp(timestamp: datetime) -> str:
+    return timestamp.strftime("%Y%m%dT%H%M%S%f")
 
 
 def get_env_var(var_name: str) -> str:

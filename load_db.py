@@ -1,11 +1,66 @@
 import logging
-import os
 from pathlib import Path
 from typing import List
-from datetime import datetime
+import os
+from dataclasses import dataclass
 
 import oracledb
 import pandas as pd
+import dotenv
+
+from utils import get_env_var
+
+
+@dataclass
+class OracledbConfig:
+    """Dataclass to hold OracleDB connection configuration."""
+
+    db_user: str
+    db_password: str
+    db_dsn: str
+    # Optional: Add lib_dir if thick mode is used and requires a specific path
+    client_lib_dir: str | None = None
+
+    @staticmethod
+    def load_config() -> "OracledbConfig":
+        # Load environment variables from .env file
+        dotenv.load_dotenv()
+
+        return OracledbConfig(
+            db_user=get_env_var("DB_USER"),
+            db_password=get_env_var("DB_PASSWORD"),
+            db_dsn=get_env_var("DB_DSN"),
+            client_lib_dir=os.getenv(
+                "ORACLE_CLIENT_LIB_DIR"
+            ),  # Assuming ORACLE_LIB_DIR env var for lib_dir
+        )
+
+    @staticmethod
+    def connect(config: "OracledbConfig") -> oracledb.Connection:
+        """Establishes and returns an OracleDB connection."""
+        connection = None
+
+        try:
+            oracledb.init_oracle_client(lib_dir=config.client_lib_dir)
+            logging.info("Oracle Client thick mode enabled.")
+        except Exception as e:
+            logging.error(
+                f"Oracle Client thick mode initialization failed: {e}. Falling back to thin mode. To enable thick mode, set environment variable ORACLE_CLIENT_LIB_DIR"
+            )
+            raise e
+
+        try:
+            connection = oracledb.connect(
+                user=config.db_user,
+                password=config.db_password,
+                dsn=config.db_dsn,
+                events=True,  # Enable events for CQN
+            )
+            logging.info("Successfully connected to Oracle Database.")
+            return connection
+        except oracledb.Error as e:
+            logging.error(f"Database connection error: {e}")
+            raise e
 
 
 def test_fetch_new_records(conn: oracledb.Connection) -> None:
@@ -26,10 +81,9 @@ def get_all_records(
     conn: oracledb.Connection,
     table_name: str,
     schema: str,
-    timestamp: datetime,
     save_dir: Path,
-    debug: bool,
-) -> Path:
+    save_name: str,
+) -> List[Path]:
     """
     Fetch all records from a table and save them as a Parquet file.
     """
@@ -38,9 +92,8 @@ def get_all_records(
         conn=conn,
         table_name=table_name,
         sql=QUERY,
-        timestamp=timestamp,
         save_dir=save_dir,
-        debug=debug,
+        save_name=save_name,
     )
 
 
@@ -48,23 +101,18 @@ def _get_records(
     conn: oracledb.Connection,
     table_name: str,
     sql: str,
-    timestamp: datetime,
     save_dir: Path,
-    debug: bool = True,
+    save_name: str,
     chunksize: int = 200000,
-) -> Path:
+) -> List[Path]:
     """
     Fetch records in chunks, save them as Parquet files, and optionally combine them.
     """
     assert save_dir.is_dir(), f"Save directory {save_dir} does not exist."
 
-    TEMP_DIR = save_dir / "temp"
-    TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    TS = timestamp.strftime("%Y%m%dT%H%M%S")
-
     logging.debug(f"Executing Query: {sql}")
 
-    temp_files = []
+    chunk_files: List[Path] = []
     chunks = pd.read_sql(
         sql=sql,
         con=conn,
@@ -72,33 +120,22 @@ def _get_records(
         dtype_backend="pyarrow",
     )
     for i, chunk in enumerate(chunks):
-        file_name = TEMP_DIR / f"{table_name}_{TS}_{i}.parquet"
+        if chunk.empty:
+            logging.warning(f"Empty chunk of table {table_name}.")
+
+        chunk_file = save_dir / f"{save_name}_chunk{i}.parquet"
         chunk.to_parquet(
-            file_name,
+            chunk_file,
             engine="pyarrow",
             compression="zstd",  # fix crash on windows server vmware, https://github.com/apache/arrow/issues/25326
+            coerce_timestamps="ms",  # fix conflict timestamp type oracledb and spark
         )
-        temp_files.append(file_name)
+        chunk_files.append(chunk_file)
+        logging.info(f"Written {chunk_file}.")
 
-    logging.info(f"Generated {len(temp_files)} chunk files.")
+    logging.info(f"Written {len(chunk_files)} chunk files.")
 
-    save_path = save_dir / f"{table_name}_{TS}.parquet"
-
-    combined = pd.concat(
-        [
-            pd.read_parquet(file, dtype_backend="pyarrow", engine="pyarrow")
-            for file in temp_files
-        ],
-        ignore_index=True,
-    )
-    logging.info(combined.info())
-    combined.to_parquet(save_path, engine="pyarrow", coerce_timestamps="ms")
-
-    if not debug:
-        for file in temp_files:
-            os.remove(file)
-
-    return save_path
+    return chunk_files
 
 
 def get_new_records(
@@ -106,12 +143,11 @@ def get_new_records(
     table_name: str,
     time_column: str,
     time_value: str,
-    timestamp: datetime,
     schema: str,
     save_dir: Path,
-    debug: bool = True,
+    save_name: str,
     chunksize: int = 200000,
-) -> Path:
+) -> List[Path]:
     """
     Fetch new records based on a time column and save them as a Parquet file.
     """
@@ -124,14 +160,13 @@ def get_new_records(
         conn=conn,
         table_name=table_name,
         sql=QUERY,
-        timestamp=timestamp,
         save_dir=save_dir,
+        save_name=save_name,
         chunksize=chunksize,
-        debug=debug,
     )
 
 
-def fetch_new_records(
+def fetch_records_by_ids(
     conn: oracledb.Connection, ids: List[str], full_table_name: str
 ) -> pd.DataFrame:
     """
@@ -142,12 +177,8 @@ def fetch_new_records(
     placeholders = ", ".join([f":{i+1}" for i in range(len(ids))])
     QUERY = f"SELECT * FROM {full_table_name} WHERE ROWID IN ({placeholders})"
 
-    try:
-        df = pd.read_sql(QUERY, con=conn, params=ids)
-        return df
-    except Exception as e:
-        logging.error(f"Error fetching records by ROWID: {e}")
-        raise
+    df = pd.read_sql(QUERY, con=conn, params=ids)
+    return df
 
 
 def get_all_tables(conn: oracledb.Connection, schema: str) -> List[str]:
@@ -172,7 +203,7 @@ def get_all_tables(conn: oracledb.Connection, schema: str) -> List[str]:
         raise
 
 
-def get_new_records1(
+def get_new_records_linear(
     conn: oracledb.Connection, key_col: str, last_key: str, full_table_name: str
 ) -> pd.DataFrame:
     """

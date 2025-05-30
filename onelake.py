@@ -4,8 +4,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, Any
 from pathlib import Path
-
 import dotenv
+
 from azure.identity import ClientSecretCredential
 from azure.storage.filedatalake import (
     DataLakeServiceClient,
@@ -100,7 +100,7 @@ def df_to_bytes(df: pd.DataFrame) -> bytes:
     return buffer.read()
 
 
-def upload_file_to_onelake(
+def upload_file(
     config: OnelakeConfig,  # Accept the configuration as a dataclass instance
     target_file: Path,
     local_file: Path,
@@ -182,23 +182,3 @@ def upload_file_to_onelake(
         f"Upload successful a file with size {len(file_content)/1024}KB to {target_file}!"
     )
     return resp
-
-
-def test_upload(local_file_to_upload: Path):
-    """
-    Tests the file upload functionality to OneLake using default configuration and target path.
-
-    Args:
-        local_file_to_upload: The path to the local file to be uploaded for testing.
-    """
-
-    success_default = upload_file_to_onelake(
-        config=OnelakeConfig.load_config(),
-        local_file=local_file_to_upload,
-        target_file=local_file_to_upload,
-    )
-
-    if success_default:
-        logging.info("Upload successfully.")
-    else:
-        logging.error(f"Upload file {local_file_to_upload} failed.")
