@@ -10,7 +10,6 @@ from typing import List, Dict
 import oracledb
 import pandas as pd
 
-
 from utils import format_timestamp, get_env_var
 import load_db
 import onelake
@@ -62,8 +61,8 @@ def assign_label(flag: SoiFlag) -> Label:
 
     if (
         flag.status
-        and flag.time_column != "None"
-        and flag.time_value != "None"
+        and flag.time_column != None
+        and flag.time_value != None
         and flag.rerun_flag == False
     ):
         return Label.INSERT
@@ -273,8 +272,8 @@ def handle_target_tables(
         "RERUN_FLAG",
         "STATUS",
     }:
-        logging.error("Not valid columns in flag table.")
-        exit()
+        logging.info(f"Not valid columns actual: {tables.columns}")
+        raise
 
     for flag in parse_flags(tables):
         try:
@@ -371,14 +370,14 @@ def poll_track():
     assert Path(SAVE_DIR).is_dir()
 
     db_config = load_db.OracledbConfig.load_config()
-    logging.info(db_config)
+    logging.debug("DB config: ", db_config)
 
     connection = None
 
     try:
-        connection = db_config.connect(db_config)
+        engine = load_db.create_engine(db_config)
         poll.start_monitoring(
-            conn=connection,
+            conn=engine.connect(),
             key_col="SURROGATE_KEY",
             full_table_name=f"{SCHEMA}.{TABLE_TO_MONITOR}",
             last_check_file=Path("state.json"),

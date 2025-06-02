@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import oracledb
 import pandas as pd
 import dotenv
+import sqlalchemy
 
 from utils import get_env_var
 
@@ -15,21 +16,24 @@ from utils import get_env_var
 class OracledbConfig:
     """Dataclass to hold OracleDB connection configuration."""
 
-    db_user: str
-    db_password: str
-    db_dsn: str
+    user: str
+    password: str
+    port: int
+    host: str
+    service: str
     # Optional: Add lib_dir if thick mode is used and requires a specific path
     client_lib_dir: str | None = None
 
     @staticmethod
     def load_config() -> "OracledbConfig":
-        # Load environment variables from .env file
         dotenv.load_dotenv()
 
         return OracledbConfig(
-            db_user=get_env_var("DB_USER"),
-            db_password=get_env_var("DB_PASSWORD"),
-            db_dsn=get_env_var("DB_DSN"),
+            user=get_env_var("DB_USER"),
+            password=get_env_var("DB_PASSWORD"),
+            host=get_env_var("DB_HOST"),
+            port=int(get_env_var("DB_PORT")),
+            service=get_env_var("DB_SERVICE"),
             client_lib_dir=os.getenv(
                 "ORACLE_CLIENT_LIB_DIR"
             ),  # Assuming ORACLE_LIB_DIR env var for lib_dir
@@ -51,9 +55,11 @@ class OracledbConfig:
 
         try:
             connection = oracledb.connect(
-                user=config.db_user,
-                password=config.db_password,
-                dsn=config.db_dsn,
+                user=config.user,
+                password=config.password,
+                host=config.host,
+                port=config.port,
+                service_name=config.service,
                 events=True,  # Enable events for CQN
             )
             logging.info("Successfully connected to Oracle Database.")
@@ -63,18 +69,11 @@ class OracledbConfig:
             raise e
 
 
-def test_fetch_new_records(conn: oracledb.Connection) -> None:
-    """
-    Fetch and print all records from a test table.
-    """
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT * FROM etl.my_table")
-            rows = cursor.fetchall()
-            for row in rows:
-                print("New Record:", row)
-    except Exception as e:
-        logging.error(f"Error fetching new records: {e}")
+def create_engine(config: OracledbConfig) -> sqlalchemy.Engine:
+
+    return sqlalchemy.create_engine(
+        f"oracle+oracledb://{config.user}:{config.password}@{config.host}:{config.port}/?service_name={config.service}",
+    )
 
 
 def get_all_records(
@@ -119,7 +118,11 @@ def _get_records(
         chunksize=chunksize,
         dtype_backend="pyarrow",
     )
+
     for i, chunk in enumerate(chunks):
+        chunk.columns = (
+            chunk.columns.str.upper()
+        )  # Convert all column names to uppercase
         if chunk.empty:
             logging.warning(f"Empty chunk of table {table_name}.")
 
@@ -204,7 +207,7 @@ def get_all_tables(conn: oracledb.Connection, schema: str) -> List[str]:
 
 
 def get_new_records_linear(
-    conn: oracledb.Connection, key_col: str, last_key: str, full_table_name: str
+    conn, key_col: str, last_key: str, full_table_name: str
 ) -> pd.DataFrame:
     """
     Fetch new records based on a key column and last key value.
@@ -213,6 +216,7 @@ def get_new_records_linear(
 
     try:
         df = pd.read_sql(QUERY, con=conn, params={"last_key": last_key})
+        df.columns = df.columns.str.upper()  # Convert all column names to uppercase
         return df
     except Exception as e:
         logging.error(f"Error fetching new records by key: {e}")
