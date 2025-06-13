@@ -2,16 +2,16 @@ import io
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Any
 from pathlib import Path
-import dotenv
+from typing import Any, Dict
 
+import dotenv
+import pandas as pd
 from azure.identity import ClientSecretCredential
 from azure.storage.filedatalake import (
-    DataLakeServiceClient,
     DataLakeFileClient,
+    DataLakeServiceClient,
 )
-import pandas as pd
 
 
 def _get_env_var(var_name: str) -> str:
@@ -179,6 +179,6 @@ def upload_file(
     )
 
     logging.info(
-        f"Upload successful a file with size {len(file_content)/1024}KB to {target_file}!"
+        f"Upload successful a file with size {len(file_content) / 1024}KB to {target_file}!"
     )
     return resp

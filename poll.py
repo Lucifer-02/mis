@@ -1,10 +1,9 @@
-import logging
 import json
+import logging
+import time
 from datetime import datetime
 from pathlib import Path
-import time
 from typing import Callable
-
 
 import load_db
 
@@ -35,7 +34,7 @@ def start_monitoring(
     conn,
     key_col: str,
     full_table_name: str,
-    poll_interval: int = 5,
+    poll_interval: int = 30,
     last_check_file: Path = Path("state.json"),
     *,
     handle_func: Callable,

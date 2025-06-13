@@ -1,19 +1,19 @@
-from dataclasses import dataclass
-from enum import Enum, auto
 import logging
-import dotenv
 import os
-from pathlib import Path
+from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Dict
+from enum import Enum, auto
+from pathlib import Path
+from typing import Dict, List
 
+import dotenv
 import oracledb
 import pandas as pd
 
-from utils import format_timestamp, get_env_var
 import load_db
 import onelake
 import poll
+from utils import format_timestamp, get_env_var
 
 
 class Label(Enum):
@@ -56,14 +56,14 @@ def assign_label(flag: SoiFlag) -> Label:
     if flag.rerun_flag and flag.status:
         return Label.RERUN
 
-    if flag.status and flag.time_column == None and flag.time_value == None:
+    if flag.status and flag.time_column is None and flag.time_value is None:
         return Label.TRUNCATE
 
     if (
         flag.status
-        and flag.time_column != None
-        and flag.time_value != None
-        and flag.rerun_flag == False
+        and flag.time_column is not None
+        and flag.time_value is not None
+        and not flag.rerun_flag
     ):
         return Label.INSERT
 
@@ -83,7 +83,6 @@ def parse_flags(flags: pd.DataFrame) -> List[SoiFlag]:
 def handle_insert(
     conn: oracledb.Connection, flag: SoiFlag, schema: str, save_dir: Path
 ) -> None:
-
     logging.info("Handling INSERT data.")
 
     before_num_files = count_files_from_chunks(
@@ -105,9 +104,9 @@ def handle_insert(
     after_num_files = count_files_from_chunks(
         [f for f in save_dir.glob(f"{flag.table_name}*") if f.is_file()]
     )
-    assert (
-        before_num_files + 1 == after_num_files
-    ), f"After insert new data for table {flag.table_name}, number of file must increse by 1, actually is before: {before_num_files}, after: {after_num_files}."
+    assert before_num_files + 1 == after_num_files, (
+        f"After insert new data for table {flag.table_name}, number of file must increse by 1, actually is before: {before_num_files}, after: {after_num_files}."
+    )
 
     for save in saves:
         success_default = onelake.upload_file(
@@ -130,9 +129,9 @@ def handle_truncate(
     before_num_files = count_files_from_chunks(
         [f for f in save_dir.glob(f"{flag.table_name}*") if f.is_file()]
     )
-    assert (
-        before_num_files == 1
-    ), f"Table {flag.table_name} is slow change table, without time column, so must only 1 file(not chunks)."
+    assert before_num_files == 1, (
+        f"Table {flag.table_name} is slow change table, without time column, so must only 1 file(not chunks)."
+    )
 
     # TODO: delete old files first
     remove_chunks(
@@ -151,9 +150,9 @@ def handle_truncate(
     after_num_files = count_files_from_chunks(
         [f for f in save_dir.glob(f"{flag.table_name}*") if f.is_file()]
     )
-    assert (
-        before_num_files == after_num_files
-    ), f"Number of file table {flag.table_name} before and after must equal."
+    assert before_num_files == after_num_files, (
+        f"Number of file table {flag.table_name} before and after must equal."
+    )
 
     # TODO: upload overwrite
 
@@ -255,9 +254,9 @@ def handle_rerun(
     after_num_files = count_files_from_chunks(
         [f for f in save_dir.glob(f"{flag.table_name}*") if f.is_file()]
     )
-    assert (
-        before_num_files == after_num_files
-    ), "Number of file table {flag.table_name} before and after must equal."
+    assert before_num_files == after_num_files, (
+        "Number of file table {flag.table_name} before and after must equal."
+    )
 
 
 def handle_target_tables(
@@ -304,7 +303,6 @@ def handle_target_tables(
 
 
 def upload_all():
-
     SCHEMA = get_env_var("SCHEMA")
     SAVE_DIR = get_env_var("SAVE_DIR")
 
@@ -336,7 +334,6 @@ def upload_all():
 
 
 def upload_full_table(table_name: str):
-
     SCHEMA = get_env_var("SCHEMA")
     SAVE_DIR = get_env_var("SAVE_DIR")
 
@@ -366,7 +363,6 @@ def upload_full_table(table_name: str):
 
 
 def poll_track():
-
     dotenv.load_dotenv()
 
     TABLE_TO_MONITOR = get_env_var("TABLE_TO_MONITOR")
@@ -407,6 +403,7 @@ def poll_track():
 def main():
     logging.basicConfig(
         level=logging.DEBUG,
+        filename="tracking.log",
         format="%(asctime)s-%(levelname)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )

@@ -1,12 +1,12 @@
 import logging
-from pathlib import Path
-from typing import List
 import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import List
 
+import dotenv
 import oracledb
 import pandas as pd
-import dotenv
 import sqlalchemy
 
 from utils import get_env_var
@@ -70,7 +70,6 @@ class OracledbConfig:
 
 
 def create_engine(config: OracledbConfig) -> sqlalchemy.Engine:
-
     return sqlalchemy.create_engine(
         f"oracle+oracledb://{config.user}:{config.password}@{config.host}:{config.port}/?service_name={config.service}",
     )
@@ -174,7 +173,7 @@ def fetch_records_by_ids(
     """
     assert ids, "ID list cannot be empty."
 
-    placeholders = ", ".join([f":{i+1}" for i in range(len(ids))])
+    placeholders = ", ".join([f":{i + 1}" for i in range(len(ids))])
     QUERY = f"SELECT * FROM {full_table_name} WHERE ROWID IN ({placeholders})"
 
     df = pd.read_sql(QUERY, con=conn, params=ids)
