@@ -120,9 +120,6 @@ def _get_records(
     )
 
     for i, chunk in enumerate(chunks):
-        chunk.columns = (
-            chunk.columns.str.upper()
-        )  # Convert all column names to uppercase
         if chunk.empty:
             logging.warning(f"Empty chunk of table {table_name}.")
 
@@ -216,7 +213,6 @@ def get_new_records_linear(
 
     try:
         df = pd.read_sql(QUERY, con=conn, params={"last_key": last_key})
-        df.columns = df.columns.str.upper()  # Convert all column names to uppercase
         return df
     except Exception as e:
         logging.error(f"Error fetching new records by key: {e}")

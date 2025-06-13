@@ -53,12 +53,11 @@ def start_monitoring(
                 last_key=last_key,
                 full_table_name=full_table_name,
             )
-            kwargs["conn"] = conn
-            handle_func(new_records, **kwargs)
 
             if len(new_records) > 0:
-                logging.info(f"Found {len(new_records)} new records")
-                logging.info(new_records)
+                logging.info(f"Found {len(new_records)} new records: {new_records}")
+                kwargs["conn"] = conn
+                handle_func(new_records, **kwargs)
 
                 save_last_record_id(
                     record_id=str(new_records.iloc[-1][key_col]),

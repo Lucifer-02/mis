@@ -37,13 +37,13 @@ class SoiFlag:
 
 def parse_flag(flag: Dict) -> SoiFlag:
     return SoiFlag(
-        surrogate_key=int(flag["SURROGATE_KEY"]),
-        update_time=datetime.strptime(str(flag["UPDATE_TIME"]), "%Y-%m-%d %H:%M:%S.%f"),
-        table_name=str(flag["TABLE_NAME"]),
-        time_column=str(flag["TIME_COLUMN"]),
-        time_value=str(flag["TIME_VALUE"]),
-        rerun_flag=bool(flag["RERUN_FLAG"]),
-        status=bool(flag["STATUS"]),
+        surrogate_key=int(flag["surrogate_key"]),
+        update_time=datetime.strptime(str(flag["update_time"]), "%Y-%m-%d %H:%M:%S.%f"),
+        table_name=flag["table_name"],
+        time_column=flag["time_column"],
+        time_value=flag["time_value"],
+        rerun_flag=bool(flag["rerun_flag"]),
+        status=bool(flag["status"]),
     )
 
 
@@ -56,7 +56,7 @@ def assign_label(flag: SoiFlag) -> Label:
     if flag.rerun_flag and flag.status:
         return Label.RERUN
 
-    if flag.status and flag.time_column == "None" and flag.time_value == "None":
+    if flag.status and flag.time_column == None and flag.time_value == None:
         return Label.TRUNCATE
 
     if (
@@ -72,6 +72,7 @@ def assign_label(flag: SoiFlag) -> Label:
 
 
 def parse_flags(flags: pd.DataFrame) -> List[SoiFlag]:
+    logging.info(flags)
     result = []
     for flag in flags.to_dict(orient="records"):
         result.append(parse_flag(flag))
@@ -108,17 +109,17 @@ def handle_insert(
         before_num_files + 1 == after_num_files
     ), f"After insert new data for table {flag.table_name}, number of file must increse by 1, actually is before: {before_num_files}, after: {after_num_files}."
 
-    # for save in saves:
-    #     success_default = onelake.upload_file_to_onelake(
-    #         config=onelake.OnelakeConfig.load_config(),
-    #         local_file=save,
-    #         target_file=Path(save.name),
-    #     )
-    #
-    #     if success_default:
-    #         logging.info("Upload successfully.")
-    #     else:
-    #         logging.error(f"Upload file {save} failed.")
+    for save in saves:
+        success_default = onelake.upload_file(
+            config=onelake.OnelakeConfig.load_config(),
+            local_file=save,
+            target_file=Path(save.name),
+        )
+
+        if success_default:
+            logging.info("Upload successfully.")
+        else:
+            logging.error(f"Upload file {save} failed.")
 
 
 def handle_truncate(
@@ -152,7 +153,7 @@ def handle_truncate(
     )
     assert (
         before_num_files == after_num_files
-    ), "Number of file table {flag.table_name} before and after must equal."
+    ), f"Number of file table {flag.table_name} before and after must equal."
 
     # TODO: upload overwrite
 
@@ -222,7 +223,10 @@ def handle_rerun(
     df = pd.read_sql(sql=sql, con=conn, params=params)
     assert len(df) > 0, "Must have an instert before"
 
+    logging.info(f"Current table: {df}.")
+
     prev_flag = parse_flags(df)[0]
+    logging.info(prev_flag)
 
     before_num_files = count_files_from_chunks(
         [f for f in save_dir.glob(f"{flag.table_name}*") if f.is_file()]
@@ -264,15 +268,15 @@ def handle_target_tables(
     save_dir: Path,
 ) -> None:
     if set(tables.columns) != {
-        "SURROGATE_KEY",
-        "UPDATE_TIME",
-        "TABLE_NAME",
-        "TIME_COLUMN",
-        "TIME_VALUE",
-        "RERUN_FLAG",
-        "STATUS",
+        "surrogate_key",
+        "update_time",
+        "table_name",
+        "time_column",
+        "time_value",
+        "rerun_flag",
+        "status",
     }:
-        logging.info(f"Not valid columns actual: {tables.columns}")
+        logging.error(f"Not valid columns actual: {tables.columns}")
         raise
 
     for flag in parse_flags(tables):
@@ -288,7 +292,9 @@ def handle_target_tables(
                 handle_truncate(conn=conn, flag=flag, schema=schema, save_dir=save_dir)
 
         except KeyError as ke:
-            logging.error(f"Look like invalid columns:", ke)
+            logging.error(
+                f"Look like invalid columns, current columns {tables.columns}:", ke
+            )
         except Exception as e:
             logging.error(
                 f"Failed to handle table {flag.table_name}, {e}, skipping...",
@@ -370,7 +376,7 @@ def poll_track():
     assert Path(SAVE_DIR).is_dir()
 
     db_config = load_db.OracledbConfig.load_config()
-    logging.debug("DB config: ", db_config)
+    logging.debug(f"DB config: {db_config}")
 
     connection = None
 
@@ -378,7 +384,7 @@ def poll_track():
         engine = load_db.create_engine(db_config)
         poll.start_monitoring(
             conn=engine.connect(),
-            key_col="SURROGATE_KEY",
+            key_col="surrogate_key",
             full_table_name=f"{SCHEMA}.{TABLE_TO_MONITOR}",
             last_check_file=Path("state.json"),
             handle_func=handle_target_tables,
