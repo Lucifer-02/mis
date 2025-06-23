@@ -13,7 +13,7 @@ import pandas as pd
 import load_db
 import onelake
 import poll
-from utils import format_timestamp, get_env_var
+import utils
 
 
 class Label(Enum):
@@ -38,7 +38,8 @@ class SoiFlag:
 def parse_flag(flag: Dict) -> SoiFlag:
     return SoiFlag(
         surrogate_key=int(flag["surrogate_key"]),
-        update_time=datetime.strptime(str(flag["update_time"]), "%Y-%m-%d %H:%M:%S.%f"),
+        # update_time=datetime.strptime(str(flag["update_time"]), "%Y-%m-%d %H:%M:%S.%f"),
+        update_time=datetime.fromisoformat(str(flag["update_time"])),
         table_name=flag["table_name"],
         time_column=flag["time_column"],
         time_value=flag["time_value"],
@@ -50,14 +51,14 @@ def parse_flag(flag: Dict) -> SoiFlag:
 def assign_label(flag: SoiFlag) -> Label:
     logging.info(f"Flag: {flag}")
 
+    if flag.status and flag.time_column is None and flag.time_value is None:
+        return Label.TRUNCATE
+
     if not flag.status:
         return Label.FAILED
 
     if flag.rerun_flag and flag.status:
         return Label.RERUN
-
-    if flag.status and flag.time_column is None and flag.time_value is None:
-        return Label.TRUNCATE
 
     if (
         flag.status
@@ -97,7 +98,7 @@ def handle_insert(
         table_name=flag.table_name,
         schema=schema,
         save_dir=save_dir,
-        save_name=f"{flag.table_name}_{format_timestamp(flag.update_time)}",
+        save_name=f"{flag.table_name}_{utils.format_timestamp(flag.update_time)}",
     )
     logging.info(f"Successfully load data to {saves}.")
 
@@ -145,7 +146,7 @@ def handle_truncate(
         table_name=flag.table_name,
         schema=schema,
         save_dir=save_dir,
-        save_name=f"{flag.table_name}_{format_timestamp(flag.update_time)}",
+        save_name=f"{flag.table_name}_{utils.format_timestamp(flag.update_time)}",
     )
     after_num_files = count_files_from_chunks(
         [f for f in save_dir.glob(f"{flag.table_name}*") if f.is_file()]
@@ -220,7 +221,7 @@ def handle_rerun(
         "rerun_flag": 0,
     }
     df = pd.read_sql(sql=sql, con=conn, params=params)
-    assert len(df) > 0, "Must have an instert before"
+    assert len(df) > 0, "Must have an insert before"
 
     logging.info(f"Current table: {df}.")
 
@@ -232,7 +233,7 @@ def handle_rerun(
     )
 
     # TODO: delete existing files
-    filename = f"{prev_flag.table_name}_{format_timestamp(prev_flag.update_time)}"
+    filename = f"{prev_flag.table_name}_{utils.format_timestamp(prev_flag.update_time)}"
     remove_chunks(
         filename=filename,
         save_dir=save_dir,
@@ -303,8 +304,8 @@ def handle_target_tables(
 
 
 def upload_all():
-    SCHEMA = get_env_var("SCHEMA")
-    SAVE_DIR = get_env_var("SAVE_DIR")
+    SCHEMA = utils.get_env_var("SCHEMA")
+    SAVE_DIR = utils.get_env_var("SAVE_DIR")
 
     db_config = load_db.OracledbConfig.load_config()
 
@@ -320,7 +321,7 @@ def upload_all():
             schema=SCHEMA,
             table_name=table_name,
             save_dir=Path(SAVE_DIR),
-            save_name=f"{table_name}_{format_timestamp(datetime.now())}",
+            save_name=f"{table_name}_{utils.format_timestamp(datetime.now())}",
         )
         for save in saves:
             success_default = onelake.upload_file(
@@ -334,8 +335,8 @@ def upload_all():
 
 
 def upload_full_table(table_name: str):
-    SCHEMA = get_env_var("SCHEMA")
-    SAVE_DIR = get_env_var("SAVE_DIR")
+    SCHEMA = utils.get_env_var("SCHEMA")
+    SAVE_DIR = utils.get_env_var("SAVE_DIR")
 
     db_config = load_db.OracledbConfig.load_config()
 
@@ -348,7 +349,7 @@ def upload_full_table(table_name: str):
         schema=SCHEMA,
         table_name=table_name,
         save_dir=Path(SAVE_DIR),
-        save_name=f"{table_name}_{format_timestamp(datetime.now())}",
+        save_name=f"{table_name}_{utils.format_timestamp(datetime.now())}",
     )
 
     for save in saves:
@@ -365,9 +366,9 @@ def upload_full_table(table_name: str):
 def poll_track():
     dotenv.load_dotenv()
 
-    TABLE_TO_MONITOR = get_env_var("TABLE_TO_MONITOR")
-    SCHEMA = get_env_var("SCHEMA")
-    SAVE_DIR = get_env_var("SAVE_DIR")
+    TABLE_TO_MONITOR = utils.get_env_var("TABLE_TO_MONITOR")
+    SCHEMA = utils.get_env_var("SCHEMA")
+    SAVE_DIR = utils.get_env_var("SAVE_DIR")
 
     assert Path(SAVE_DIR).is_dir()
 
